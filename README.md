@@ -1,3 +1,10 @@
+TODO:
+* Scan local network for DLNA media renderers.
+* Control media renderers: 
+	* Play media from Media Server by URL 
+	* Implement transport control: play, pause, stop, next, prev...
+
+--------- ORIGINAL ------------	
 # SoapESP32
 
 This Arduino library provides basic UPnP/SOAP functionality, enabling an ESP32 device to scan the local network for DLNA media servers, browse their content and finally download files.
