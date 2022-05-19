@@ -1155,30 +1155,29 @@ void SoapESP32::readStop()
   m_clientDataAvailable = 0;
 }
 
-//
-// HTTP GET request
-//
-bool SoapESP32::soapGet(const IPAddress ip, const uint16_t port, const char *uri)
-{
-  if (m_clientDataConOpen) {  
-    // should not happen...probably buggy main
-    claimSPI();
-    m_client->stop();
-    releaseSPI();
-    m_clientDataConOpen = false;
-    log_w("client data connection to media server was still open. Closed now.");
-  }
-
+bool SoapESP32::connectToServer(const IPAddress ip, const uint16_t port) {
+  readStop(); 
   for (int i = 0;;) {
     claimSPI();
-    bool ret = m_client->connect(ip, port);
+    int ret = m_client->connect(ip, (uint16_t)port);
     releaseSPI();
     if (ret) break;
     if (++i >= 3) {
       log_e("error connecting to server ip=%s, port=%d", ip.toString().c_str(), port);
       return false;
-    }
+    }  
     delay(100);  
+  }
+  return true;
+}
+
+//
+// HTTP GET request
+//
+bool SoapESP32::soapGet(const IPAddress ip, const uint16_t port, const char *uri)
+{
+  if (!connectToServer(ip, port)) {
+    return false;
   }
 
   // memory allocation for assembling HTTP header
@@ -1232,27 +1231,10 @@ bool SoapESP32::soapTransportActionPost(const IPAddress ip,
                                const char *uri, 
                                const char *objectId) 
 {
-  if (m_clientDataConOpen) {  
-    // should not get here...probably buggy main
-    claimSPI();
-    m_client->stop();
-    releaseSPI();
-    m_clientDataConOpen = false;
-    log_w("client data connection to media server was still open. Closed now.");
+  if (!connectToServer(ip, port)) {
+    return false;
   }
-
-  for (int i = 0;;) {
-    claimSPI();
-    int ret = m_client->connect(ip, (uint16_t)port);
-    releaseSPI();
-    if (ret) break;
-    if (++i >= 2) {
-      log_e("error connecting to server ip=%s, port=%d", ip.toString().c_str(), port);
-      return false;
-    }  
-    delay(100);  
-  }
-
+  
   uint16_t messageLength;
   char buffer[200];
   char index[12], count[6];
@@ -1354,26 +1336,7 @@ bool SoapESP32::soapBrowsePost(const IPAddress ip,
                                const uint32_t startingIndex, 
                                const uint16_t maxCount)
 {
-  if (m_clientDataConOpen) {  
-    // should not get here...probably buggy main
-    claimSPI();
-    m_client->stop();
-    releaseSPI();
-    m_clientDataConOpen = false;
-    log_w("client data connection to media server was still open. Closed now.");
-  }
-
-  for (int i = 0;;) {
-    claimSPI();
-    int ret = m_client->connect(ip, (uint16_t)port);
-    releaseSPI();
-    if (ret) break;
-    if (++i >= 2) {
-      log_e("error connecting to server ip=%s, port=%d", ip.toString().c_str(), port);
-      return false;
-    }  
-    delay(100);  
-  }
+  connectToServer(ip, port);
 
   uint16_t messageLength;
   char buffer[200];

@@ -84,6 +84,7 @@
 #define HEADER_CONTENT_LENGTH_D      "Content-Length: %d\r\n"
 
 #define HEADER_SOAP_ACTION_BROWSE    "SOAPAction: \"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"\r\n"
+#define HEADER_SOAP_ACTION_SetAVTransportURI  "SOAPAction: \"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"\r\n"                                   
 
 #define HEADER_USER_AGENT            "User-Agent: ESP32/Player/UPNP1.0\r\n"
 #define HEADER_CONNECTION_CLOSE      "Connection: close\r\n"
@@ -111,6 +112,9 @@
 #define SOAP_REQUESTEDCOUNT_END   "</RequestedCount>\r\n"
 #define SOAP_SORTCRITERIA_START   "<SortCriteria>"
 #define SOAP_SORTCRITERIA_END     "</SortCriteria>\r\n"
+
+//#define SOAP_SETAVTRANSPORTURI_START  "<u:SetAVTransportURI xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\r\n<InstanceID>0</InstanceID>\r\n<CurrentURI>http://192.168.12.222:32469/object/51a05d70ebb2ea7ee918/file.flac</CurrentURI>
+//#define SOAP_SETAVTRANSPORTURI_END "</u:SetAVTransportURI>"
 
 #define SOAP_PLAY                 "<u:Play xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\r\n<InstanceID>0</InstanceID>\r\n<Speed>1</Speed>\r\n</u:Play>\r\n"
 #define SOAP_PAUSE                "<u:Pause xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\r\n<InstanceID>0</InstanceID>\r\n</u:Play>\r\n"
@@ -243,6 +247,7 @@ class SoapESP32
     const char* serviceClassName(serviceClass_et serviceClass);   
     const char* searchTX(serviceClass_et serviceClass);
     const char* serviceSchema(serviceClass_et serviceClass);
+    bool connectToServer(const IPAddress ip, const uint16_t port);
 
 };
 
