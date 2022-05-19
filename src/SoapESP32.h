@@ -57,14 +57,22 @@
 #define SSDP_LOCATION_BUF_SIZE      150
 #define SSDP_CONTROL_URL_BUF_SIZE   200
 #define SSDP_TMP_BUFFER_SIZE        500
-#define SSDP_M_SEARCH_TX           "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 3\r\n" \
-                                   "ST: urn:schemas-upnp-org:device:MediaServer:1\r\n\r\n"
 
 #define SSDP_LOCATION              "Location: http://"
-#define SSDP_SERVICE_TYPE          "ST: urn:schemas-upnp-org:device:MediaServer:1"
+#define SSDP_SERVICE_TYPE_DMS      "ST: urn:schemas-upnp-org:device:MediaServer:1"
+#define SSDP_SERVICE_TYPE_DMR      "ST: urn:schemas-upnp-org:device:MediaRenderer:1"
 #define SSDP_NOTIFICATION          "NOTIFY * HTTP/1.1"
-#define SSDP_NOTIFICATION_TYPE     "NT: urn:schemas-upnp-org:device:MediaServer:1"
+#define SSDP_NOTIFICATION_TYPE_DMS "NT: urn:schemas-upnp-org:device:MediaServer:1"
+#define SSDP_NOTIFICATION_TYPE_DMR "NT: urn:schemas-upnp-org:device:MediaRenderer:1"
 #define SSDP_NOTIFICATION_SUB_TYPE "NTS: ssdp:alive"
+
+#define SSDP_DMR_SERVICE_TYPE      "ST: urn:schemas-upnp-org:device:MediaServer:1"
+
+#define SSDP_M_SEARCH_TX_DMS       "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 3\r\n" \
+                                   "ST: urn:schemas-upnp-org:device:MediaServer:1\r\n\r\n"
+#define SSDP_M_SEARCH_TX_DMR       "M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 3\r\n" \
+                                   "ST: urn:schemas-upnp-org:device:MediaRenderer:1\r\n\r\n"
+
 
 // HTTP header lines
 #define HTTP_VERSION                 "HTTP/1.1"
@@ -74,7 +82,9 @@
 #define HEADER_CONTENT_TYPE          "Content-Type: text/xml; charset=\"utf-8\"\r\n"
 #define HEADER_TRANS_ENC_CHUNKED     "Transfer-Encoding: chunked"
 #define HEADER_CONTENT_LENGTH_D      "Content-Length: %d\r\n"
-#define HEADER_SOAP_ACTION           "SOAPAction: \"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"\r\n"
+
+#define HEADER_SOAP_ACTION_BROWSE    "SOAPAction: \"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"\r\n"
+
 #define HEADER_USER_AGENT            "User-Agent: ESP32/Player/UPNP1.0\r\n"
 #define HEADER_CONNECTION_CLOSE      "Connection: close\r\n"
 #define HEADER_CONNECTION_KEEP_ALIVE "Connection: keep-alive\r\n"
@@ -86,6 +96,7 @@
 #define SOAP_ENVELOPE_END         "</s:Envelope>\r\n\r\n"
 #define SOAP_BODY_START           "<s:Body>"
 #define SOAP_BODY_END             "</s:Body>\r\n"
+
 #define SOAP_BROWSE_START         "<u:Browse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\">\r\n"
 #define SOAP_BROWSE_END           "</u:Browse>\r\n"
 #define SOAP_OBJECTID_START       "<ObjectID>"
@@ -101,9 +112,15 @@
 #define SOAP_SORTCRITERIA_START   "<SortCriteria>"
 #define SOAP_SORTCRITERIA_END     "</SortCriteria>\r\n"
 
+#define SOAP_PLAY                 "<u:Play xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\r\n<InstanceID>0</InstanceID>\r\n<Speed>1</Speed>\r\n</u:Play>\r\n"
+#define SOAP_PAUSE                "<u:Pause xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\r\n<InstanceID>0</InstanceID>\r\n</u:Play>\r\n"
+#define SOAP_STOP                 "<u:Stop xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\r\n<InstanceID>0</InstanceID>\r\n</u:Stop>\r\n"
+
+
 // UPnP service data
 #define UPNP_URN_SCHEMA                   "schemas-upnp-org:service:"
 #define UPNP_URN_SCHEMA_CONTENT_DIRECTORY "urn:schemas-upnp-org:service:ContentDirectory:1"
+#define UPNP_URN_SCHEMA_AV_TRANSPORT      "urn:schemas-upnp-org:service:AVTransport:1"
 
 // SOAP default browse parameters
 #define SOAP_DEFAULT_BROWSE_FLAG           "BrowseDirectChildren"
@@ -164,6 +181,8 @@ struct soapServer_t
 };
 typedef std::vector<soapServer_t> soapServerVect_t;
 
+typedef enum {	DMS, DMP, DMR, DMC } serviceClass_et;
+
 // SoapESP32 class
 class SoapESP32
 {
@@ -176,7 +195,7 @@ class SoapESP32
     bool        wakeUpServer(const char *macWOL);
     void        clearServerList(void);
     bool        addServer(IPAddress ip, uint16_t port, const char *controlURL, const char *name = "My Media Server");
-    uint8_t     seekServer(void);
+    uint8_t     seekServer(serviceClass_et serviceClass);
     uint8_t     getServerCount(void);
     bool        getServerInfo(uint8_t srv, soapServer_t *serverInfo);
     bool        browseServer(const uint8_t srv, const char *objectId, soapObjectVect_t *browseResult, 
@@ -207,16 +226,24 @@ class SoapESP32
     char               m_xmlReplaceBuffer[15];  // Fits longest string in replaceWith[] array
 
     int  soapClientTimedRead(void);
-    bool soapUDPmulticast(uint8_t repeats = 0);
-    bool soapSSDPquery(std::vector<soapServer_t> *rcvd, int msWait = SSDP_MAX_REPLY_TIMEOUT);
+    bool soapUDPmulticast(serviceClass_et serviceClass, uint8_t repeats = 0);
+    bool soapSSDPquery(soapServerVect_t *result, serviceClass_et serviceClass, int msWait = SSDP_MAX_REPLY_TIMEOUT);
     bool soapGet(const IPAddress ip, const uint16_t port, const char *uri);
-    bool soapPost(const IPAddress ip, const uint16_t port, const char *uri, const char *objectId, 
-                  const uint32_t startingIndex, const uint16_t maxCount);
+    bool soapBrowsePost(const IPAddress ip, const uint16_t port, const char *uri, const char *objectId, const uint32_t startingIndex, const uint16_t maxCount);
+    bool soapTransportActionPost(const IPAddress ip, const uint16_t port, const char *uri, const char *objectId); 
+
     bool soapReadHttpHeader(uint64_t *contentLength, bool *chunked = NULL);
     int  soapReadXML(bool chunked = false, bool replace = false);
     bool soapScanAttribute(const String *attributes, String *result, const char *searchFor);
     bool soapScanContainer(const String *parentId, const String *attributes, const String *container, soapObjectVect_t *browseResult);
     bool soapScanItem(const String *parentId, const String *attributes, const String *item, soapObjectVect_t *browseResult);
+    
+    const char* ssdpST(serviceClass_et serviceClass);
+    const char* ssdpNT(serviceClass_et serviceClass);
+    const char* serviceClassName(serviceClass_et serviceClass);   
+    const char* searchTX(serviceClass_et serviceClass);
+    const char* serviceSchema(serviceClass_et serviceClass);
+
 };
 
 #endif
