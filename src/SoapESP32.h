@@ -85,6 +85,9 @@
 
 #define HEADER_SOAP_ACTION_BROWSE    "SOAPAction: \"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"\r\n"
 #define HEADER_SOAP_ACTION_SetAVTransportURI  "SOAPAction: \"urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI\"\r\n"                                   
+#define HEADER_SOAP_ACTION_PLAY      "SOAPAction: \"urn:schemas-upnp-org:service:AVTransport:1#Play\"\r\n"
+#define HEADER_SOAP_ACTION_PAUSE     "SOAPAction: \"urn:schemas-upnp-org:service:AVTransport:1#Pause\"\r\n"
+#define HEADER_SOAP_ACTION_STOP      "SOAPAction: \"urn:schemas-upnp-org:service:AVTransport:1#Stop\"\r\n"
 
 #define HEADER_USER_AGENT            "User-Agent: ESP32/Player/UPNP1.0\r\n"
 #define HEADER_CONNECTION_CLOSE      "Connection: close\r\n"
@@ -186,6 +189,7 @@ struct soapServer_t
 typedef std::vector<soapServer_t> soapServerVect_t;
 
 typedef enum {	DMS, DMP, DMR, DMC } serviceClass_et;
+typedef enum { PLAY, PAUSE, STOP, SETURI } transportAction_et;
 
 // SoapESP32 class
 class SoapESP32
@@ -212,6 +216,12 @@ class SoapESP32
     size_t      available(void);
     const char *getFileTypeName(eFileType fileType);
 
+    //DMR Transport control
+    bool isPlaying(void);
+    void play(void);
+    void stop(void);
+    void pause(void);
+    
   private:
 #ifdef USE_ETHERNET
     EthernetClient    *m_client;                // pointer to EthernetClient object
@@ -234,8 +244,7 @@ class SoapESP32
     bool soapSSDPquery(soapServerVect_t *result, serviceClass_et serviceClass, int msWait = SSDP_MAX_REPLY_TIMEOUT);
     bool soapGet(const IPAddress ip, const uint16_t port, const char *uri);
     bool soapBrowsePost(const IPAddress ip, const uint16_t port, const char *uri, const char *objectId, const uint32_t startingIndex, const uint16_t maxCount);
-    bool soapTransportActionPost(const IPAddress ip, const uint16_t port, const char *uri, const char *objectId); 
-
+    bool soapTransportActionPost(const IPAddress ip, const uint16_t port, const char *uri, transportAction_et action); 
     bool soapReadHttpHeader(uint64_t *contentLength, bool *chunked = NULL);
     int  soapReadXML(bool chunked = false, bool replace = false);
     bool soapScanAttribute(const String *attributes, String *result, const char *searchFor);
@@ -248,6 +257,9 @@ class SoapESP32
     const char* searchTX(serviceClass_et serviceClass);
     const char* serviceSchema(serviceClass_et serviceClass);
     bool connectToServer(const IPAddress ip, const uint16_t port);
+    void sendRequest(String str);
+    bool waitForResponse(void);
+    
 
 };
 

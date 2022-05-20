@@ -1155,7 +1155,8 @@ void SoapESP32::readStop()
   m_clientDataAvailable = 0;
 }
 
-bool SoapESP32::connectToServer(const IPAddress ip, const uint16_t port) {
+bool SoapESP32::connectToServer(const IPAddress ip, const uint16_t port) 
+{
   readStop(); 
   for (int i = 0;;) {
     claimSPI();
@@ -1167,6 +1168,35 @@ bool SoapESP32::connectToServer(const IPAddress ip, const uint16_t port) {
       return false;
     }  
     delay(100);  
+  }
+  return true;
+}
+
+void SoapESP32::sendRequest(String str) 
+{
+  // send request to server
+  log_v("send request to server:\n%s", str.c_str());
+  claimSPI();
+  m_client->print(str);
+  releaseSPI();
+}
+
+bool SoapESP32::waitForResponse(void) 
+{
+  // give server some time to answer
+  uint32_t start = millis();
+  while (true) {
+    claimSPI();
+    int av = m_client->available();
+    releaseSPI();
+    if (av) break;
+    if (millis() > (start + SERVER_RESPONSE_TIMEOUT)) {
+      claimSPI();
+      m_client->stop();
+      releaseSPI();
+      log_e("No reply from server for %d ms", SERVER_RESPONSE_TIMEOUT);
+      return false;
+    }
   }
   return true;
 }
@@ -1200,36 +1230,16 @@ bool SoapESP32::soapGet(const IPAddress ip, const uint16_t port, const char *uri
   str += HEADER_USER_AGENT;
   str += HEADER_EMPTY_LINE;           // empty line marks end of HTTP header
 
-  // send request to server
-  claimSPI();
-  m_client->print(str);
-  releaseSPI();
-
-  // give server some time to answer
-  uint32_t start = millis();
-  while (true) {
-    claimSPI();
-    int av = m_client->available();
-    releaseSPI();
-    if (av) break;
-    if (millis() > (start + SERVER_RESPONSE_TIMEOUT)) {
-      claimSPI();
-      m_client->stop();
-      releaseSPI();
-      log_e("GET: no reply from server for %d ms", SERVER_RESPONSE_TIMEOUT);
-      free(buffer);
-      return false;
-    }
-  }
+  sendRequest(str);
+  bool ret = waitForResponse();
   free(buffer);
-
-  return true;
+  return ret;
 }
 
 bool SoapESP32::soapTransportActionPost(const IPAddress ip, 
                                const uint16_t port, 
-                               const char *uri, 
-                               const char *objectId) 
+                               const char *uri,
+                               transportAction_et action) 
 {
   if (!connectToServer(ip, port)) {
     return false;
@@ -1244,15 +1254,11 @@ bool SoapESP32::soapTransportActionPost(const IPAddress ip,
   messageLength = sizeof(SOAP_ENVELOPE_START) - 1;
   messageLength += sizeof(SOAP_BODY_START) - 1;
    
-  messageLength += sizeof(SOAP_BROWSE_START) - 1;
-  messageLength += sizeof(SOAP_OBJECTID_START) - 1 + strlen(objectId) + sizeof(SOAP_OBJECTID_END) - 1;
-  messageLength += sizeof(SOAP_BROWSEFLAG_START) - 1 + sizeof(SOAP_DEFAULT_BROWSE_FLAG) - 1 + sizeof(SOAP_BROWSEFLAG_END) - 1;
-  messageLength += sizeof(SOAP_FILTER_START) - 1 + sizeof(SOAP_DEFAULT_BROWSE_FILTER) - 1 + sizeof(SOAP_FILTER_END) - 1;
-  messageLength += sizeof(SOAP_STARTINGINDEX_START) - 1 + strlen(index) + sizeof(SOAP_STARTINGINDEX_END) - 1;
-  messageLength += sizeof(SOAP_REQUESTEDCOUNT_START) - 1 + strlen(count) + sizeof(SOAP_REQUESTEDCOUNT_END) - 1;
-  messageLength += sizeof(SOAP_SORTCRITERIA_START) - 1 + sizeof(SOAP_DEFAULT_BROWSE_SORT_CRITERIA) - 1 + sizeof(SOAP_SORTCRITERIA_END) - 1;
-  messageLength += sizeof(SOAP_BROWSE_END) - 1;
-  
+  switch (action) {
+    case PLAY: messageLength += sizeof(SOAP_PLAY) - 1; break;
+    case STOP: messageLength += sizeof(SOAP_STOP) - 1; break;
+    case PAUSE: messageLength += sizeof(SOAP_PAUSE) - 1; break;
+  }
   
   messageLength += sizeof(SOAP_BODY_END) - 1;
   messageLength += sizeof(SOAP_ENVELOPE_END) - 1;
@@ -1272,58 +1278,27 @@ bool SoapESP32::soapTransportActionPost(const IPAddress ip,
   snprintf(buffer, sizeof(buffer), HEADER_CONTENT_LENGTH_D, messageLength);
   str += buffer;
   str += HEADER_CONTENT_TYPE;
-  str += HEADER_SOAP_ACTION_BROWSE;
+  switch (action) {
+    case PLAY: str += HEADER_SOAP_ACTION_PLAY; break;
+    case STOP: str += HEADER_SOAP_ACTION_STOP; break;
+    case PAUSE: str += HEADER_SOAP_ACTION_PAUSE; break;
+  }
   str += HEADER_USER_AGENT;
   str += HEADER_EMPTY_LINE;                    // empty line marks end of HTTP header !
 
   // assemble SOAP message (multiple str+= instead of a single str+=..+..+.. reduces allocations)
   str += SOAP_ENVELOPE_START;
   str += SOAP_BODY_START;
-  str += SOAP_BROWSE_START;
-  str += SOAP_OBJECTID_START;
-  str += objectId;
-  str += SOAP_OBJECTID_END;
-  str += SOAP_BROWSEFLAG_START;
-  str += SOAP_DEFAULT_BROWSE_FLAG;
-  str += SOAP_BROWSEFLAG_END;
-  str += SOAP_FILTER_START;
-  str += SOAP_DEFAULT_BROWSE_FILTER;
-  str += SOAP_FILTER_END;
-  str += SOAP_STARTINGINDEX_START;
-  str += index;
-  str += SOAP_STARTINGINDEX_END;
-  str += SOAP_REQUESTEDCOUNT_START;
-  str += count;
-  str += SOAP_REQUESTEDCOUNT_END;
-  str += SOAP_SORTCRITERIA_START;
-  str += SOAP_DEFAULT_BROWSE_SORT_CRITERIA;
-  str += SOAP_SORTCRITERIA_END;
-  str += SOAP_BROWSE_END;
+  switch (action) {
+    case PLAY: str += SOAP_PLAY; break;
+    case STOP: str += SOAP_STOP; break;
+    case PAUSE: str += SOAP_PAUSE; break;
+  }
   str += SOAP_BODY_END;
   str += SOAP_ENVELOPE_END;
 
-  // send request to server
-  log_v("send request to server:\n%s", str.c_str());
-  claimSPI();
-  m_client->print(str);
-  releaseSPI();
-
-  // wait for a reply until timeout
-  uint32_t start = millis();
-  while (true) {
-    claimSPI();
-    int av = m_client->available();
-    releaseSPI();
-    if (av) break;
-    if (millis() > (start + SERVER_RESPONSE_TIMEOUT)) {
-      claimSPI();
-      m_client->stop();
-      releaseSPI();
-      log_e("POST: no reply from server within %d ms", SERVER_RESPONSE_TIMEOUT);
-      return false;
-    }
-  }
-  return true;
+  sendRequest(str);
+  return waitForResponse();
 }
                                  
 //
@@ -1404,28 +1379,8 @@ bool SoapESP32::soapBrowsePost(const IPAddress ip,
   str += SOAP_BODY_END;
   str += SOAP_ENVELOPE_END;
 
-  // send request to server
-  log_v("send request to server:\n%s", str.c_str());
-  claimSPI();
-  m_client->print(str);
-  releaseSPI();
-
-  // wait for a reply until timeout
-  uint32_t start = millis();
-  while (true) {
-    claimSPI();
-    int av = m_client->available();
-    releaseSPI();
-    if (av) break;
-    if (millis() > (start + SERVER_RESPONSE_TIMEOUT)) {
-      claimSPI();
-      m_client->stop();
-      releaseSPI();
-      log_e("POST: no reply from server within %d ms", SERVER_RESPONSE_TIMEOUT);
-      return false;
-    }
-  }
-  return true;
+  sendRequest(str);
+  return waitForResponse();  
 }
 
 //
@@ -1463,5 +1418,24 @@ const char *SoapESP32::getFileTypeName(eFileType fileType)
   return (fileTypeAudio <= fileType && fileType <= fileTypeVideo) ? fileTypes[fileType] : fileTypes[fileTypeOther];
 }
 
+bool SoapESP32::isPlaying(void) 
+{
+  return false;
+}
+
+void SoapESP32::play(void) 
+{
+  soapTransportActionPost(m_server[0].ip, m_server[0].port, m_server[0].controlURL.c_str(), PLAY);
+}
+
+void SoapESP32::stop(void)
+{
+  soapTransportActionPost(m_server[0].ip, m_server[0].port, m_server[0].controlURL.c_str(), STOP);
+}
+
+void SoapESP32::pause(void) 
+{
+  soapTransportActionPost(m_server[0].ip, m_server[0].port, m_server[0].controlURL.c_str(), PAUSE);
+}
 
 
