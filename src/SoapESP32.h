@@ -174,6 +174,8 @@ struct soapObject_t
   String uri;               // item URI on server, needed for download with GET
   IPAddress downloadIp;     // download IP can differ from server IP
   uint16_t downloadPort;    // download port can differ from server control port
+  String albumArtUri;       // item URI of Album Art image
+  String iconUri;           // item URI of Icon image ( smaller version of album art )
 };
 typedef std::vector<soapObject_t> soapObjectVect_t;
 

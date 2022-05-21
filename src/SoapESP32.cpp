@@ -38,7 +38,7 @@
 
 enum eXpath { xpFriendlyName = 0, xpServiceType, xpControlUrl, xpBrowseContainer, xpBrowseContainerAlt1, xpBrowseContainerAlt2,
              xpBrowseItem, xpBrowseItemAlt1, xpBrowseItemAlt2, xpBrowseNumberReturned, xpBrowseNumberReturnedAlt1, xpBrowseNumberReturnedAlt2,
-             xpTitle, xpAlbum, xpArtist, xpClass, xpResource };
+             xpTitle, xpAlbum, xpArtist, xpClass, xpResource, xpAlbumArt, xpIcon };
 
 xPathParser_t xmlParserPaths[] = { 
   { .num = 3, .tagNames = { "root", "device", "friendlyName" } },
@@ -57,7 +57,9 @@ xPathParser_t xmlParserPaths[] = {
   { .num = 1, .tagNames = { "upnp:album" } },
   { .num = 1, .tagNames = { "upnp:artist" } },
   { .num = 1, .tagNames = { "upnp:class" } },
-  { .num = 1, .tagNames = { "res" } }
+  { .num = 1, .tagNames = { "res" } },
+  { .num = 1, .tagNames = { "upnp:albumArtURI" } },
+  { .num = 1, .tagNames = { "upnp:icon" } }
 };
 
 const char *fileTypes[] = { "other", "audio", "picture", "video", "" };
@@ -666,7 +668,7 @@ bool SoapESP32::soapScanAttribute(const String *attributes, String *result, cons
   }
 
   *result = "";   // empty for next call
-  log_w("attribute: \"%s\" missing.", what);
+  log_d("attribute: \"%s\" missing.", what);
 
   return false;
 }
@@ -789,17 +791,21 @@ bool SoapESP32::soapScanItem(const String *parentId,
   info.sampleFrequency = 0;
   info.size = 0;
   info.sizeMissing = false;
+  info.albumArtUri = "";
+  info.iconUri = "";
 
   // scan for uri, size, album (sometimes dir name when picture file) and title, artist (when audio file)
-  MiniXPath xPathTitle, xPathAlbum, xPathArtist, xPathClass, xPathRes;
+  MiniXPath xPathTitle, xPathAlbum, xPathArtist, xPathClass, xPathRes, xPathAlbumArt, xPathIcon;
   String strAttr((char *)0);
-  bool gotTitle = false, gotAlbum = false, gotArtist = false, gotClass = false, gotRes = false;
+  bool gotTitle = false, gotAlbum = false, gotArtist = false, gotClass = false, gotRes = false, gotAlbumArt = false, gotIcon = false;
 
   xPathTitle.setPath(xmlParserPaths[xpTitle].tagNames, xmlParserPaths[xpTitle].num);
   xPathAlbum.setPath(xmlParserPaths[xpAlbum].tagNames, xmlParserPaths[xpAlbum].num);
   xPathArtist.setPath(xmlParserPaths[xpArtist].tagNames, xmlParserPaths[xpArtist].num);
   xPathClass.setPath(xmlParserPaths[xpClass].tagNames, xmlParserPaths[xpClass].num);
   xPathRes.setPath(xmlParserPaths[xpResource].tagNames, xmlParserPaths[xpResource].num);
+  xPathAlbumArt.setPath(xmlParserPaths[xpAlbumArt].tagNames, xmlParserPaths[xpAlbumArt].num);
+  xPathIcon.setPath(xmlParserPaths[xpIcon].tagNames, xmlParserPaths[xpIcon].num);
   while (i < item->length()) {
     if (!gotTitle && xPathTitle.getValue((char)item->operator[](i), &str)) {
       if (str.length() == 0) return false;    // title is a must 
@@ -817,6 +823,16 @@ bool SoapESP32::soapScanItem(const String *parentId,
       log_d("artist=\"%s\"", str.c_str());
       gotArtist = true;
     }
+    if (!gotAlbumArt && xPathAlbumArt.getValue((char)item->operator[](i), &str)) {
+      info.albumArtUri = str;                      // missing album art not a showstopper
+      log_d("albumArtUri=\"%s\"", str.c_str());
+      gotAlbumArt = true;
+    }
+    if (!gotIcon && xPathIcon.getValue((char)item->operator[](i), &str)) {
+      info.iconUri = str;                      // missing icon not a showstopper
+      log_d("iconUri=\"%s\"", str.c_str());
+      gotIcon = true;
+    }
     if (!gotClass && xPathClass.getValue((char)item->operator[](i), &str)) {
       log_d("class=\"%s\"", str.c_str());
       if (str.indexOf("audioItem") >= 0) 
@@ -830,6 +846,7 @@ bool SoapESP32::soapScanItem(const String *parentId,
       gotClass = true;
     }
     if (!gotRes && xPathRes.getValue((char)item->operator[](i), &str, &strAttr)) {
+      log_v("str=\"%s\"", str.c_str());
       if (str.startsWith("http://")) {
         // scan for download ip & port
         if (sscanf(str.c_str(), "http://%[0-9.]:%d/", address, &port) != 2) return false;
@@ -843,7 +860,10 @@ bool SoapESP32::soapScanItem(const String *parentId,
       else {
         info.uri = str;
       }
-      if (info.uri.length() == 0) return false;   // valid URI is a must     
+      if (info.uri.length() == 0) { 
+        log_w("empty URI");
+        return false;   // valid URI is a must     
+      }
       log_d("uri=\"%s\"", info.uri.c_str());
 
       // scan item size
